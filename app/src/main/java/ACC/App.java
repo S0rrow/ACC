@@ -3,12 +3,37 @@
  */
 package ACC;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.config.Configurator;
+
 public class App {
-    public String getGreeting() {
-        return "Hello World!";
-    }
+    public static final String ANSI_RESET = "\u001B[0m";
+    public static final String ANSI_BLACK = "\u001B[30m";
+    public static final String ANSI_RED = "\u001B[31m";
+    public static final String ANSI_GREEN = "\u001B[32m";
+    public static final String ANSI_YELLOW = "\u001B[33m";
+    public static final String ANSI_BLUE = "\u001B[34m";
+    public static final String ANSI_PURPLE = "\u001B[35m";
+    public static final String ANSI_CYAN = "\u001B[36m";
+    public static final String ANSI_WHITE = "\u001B[37m";
+
+    static Logger logger = LogManager.getLogger(App.class.getName());
 
     public static void main(String[] args) {
-        System.out.println(new App().getGreeting());
+        Configurator.setLevel(App.class, Level.TRACE);
+
+        App app = new App();
+        app.run(args);
+    }
+
+    public void run(String[] args) {
+        logger.trace(ANSI_BLUE + "trace" + ANSI_RESET);
+        logger.debug(ANSI_PURPLE + "debug" + ANSI_RESET);
+        logger.info(ANSI_GREEN + "info" + ANSI_RESET);
+        logger.warn(ANSI_YELLOW + "warn" + ANSI_RESET);
+        logger.error(ANSI_RED + "error" + ANSI_RESET);
+        logger.fatal(ANSI_RED + "fatal" + ANSI_RESET);
     }
 }
