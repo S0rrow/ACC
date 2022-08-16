@@ -3,9 +3,7 @@
  */
 package ACC;
 
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.*;
 import org.apache.logging.log4j.core.config.Configurator;
 
 public class App {
@@ -29,11 +27,6 @@ public class App {
     }
 
     public void run(String[] args) {
-        logger.trace(ANSI_BLUE + "trace" + ANSI_RESET);
-        logger.debug(ANSI_PURPLE + "debug" + ANSI_RESET);
-        logger.info(ANSI_GREEN + "info" + ANSI_RESET);
-        logger.warn(ANSI_YELLOW + "warn" + ANSI_RESET);
-        logger.error(ANSI_RED + "error" + ANSI_RESET);
-        logger.fatal(ANSI_RED + "fatal" + ANSI_RESET);
+        logger.trace(ANSI_BLUE + "[debug] > run" + ANSI_RESET);
     }
 }
