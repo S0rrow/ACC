@@ -16,12 +16,15 @@ public class GitFunctions {
     public String name;
 
     public boolean clone(String url, String path) {
-        App.logger.info("> cloning " + url + " to " + path);
+        String repo_name = get_repo_name_from_url(url);
+        App.logger.info("> cloning " + App.ANSI_BLUE + url + App.ANSI_RESET + " to " + App.ANSI_BLUE + path
+                + App.ANSI_RESET + " as " + App.ANSI_YELLOW + repo_name + App.ANSI_RESET);
         try {
-            name = get_repo_name_from_url(url);
+            if (new File(path + "/" + repo_name).exists())
+                return true;
             Git.cloneRepository()
                     .setURI(url)
-                    .setDirectory(new java.io.File(path))
+                    .setDirectory(new java.io.File(path + "/" + repo_name))
                     .setProgressMonitor(new TextProgressMonitor())
                     .call();
             return true;
@@ -31,44 +34,70 @@ public class GitFunctions {
         }
     }
 
-    public boolean crawl_commit_id(String repo_name, String path) {
-        ProcessBuilder pb = new ProcessBuilder("git", "log", "--pretty=format:\"%H\"");
+    private ArrayList<String> get_commit_hash(String repo_path, String file_name) {
+        ArrayList<String> hashes = new ArrayList<>();
         try {
-            pb.directory(new java.io.File(path));
-            Process p = pb.start();
-            if (!saveResult(p, path)) {
-                return false;
+            ProcessBuilder pb = new ProcessBuilder();
+            pb.directory(new File(repo_path));
+            pb.command("git", "log", "--pretty=format:%H", file_name);
+            Process process = pb.start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line = "";
+            while ((line = reader.readLine()) != null) {
+                hashes.add(line);
             }
-            p.waitFor();
-            return true;
+            process.waitFor();
+            return hashes;
         } catch (Exception e) {
             App.logger.error(App.ANSI_RED + "[error] > Exception : " + e.getMessage());
-            return false;
+            return null;
         }
     }
 
-    public boolean get_all_commits(ArrayList<String> repo_list, ArrayList<String> repo_name, String path) {
+    public String[] extract_diff(String repo_git, String repo_name, String file_name, String new_cid) {
+        App.logger.trace(App.ANSI_BLUE + "[status] > extracting diff from " + repo_name + App.ANSI_RESET + " to "
+                + App.ANSI_BLUE + file_name + App.ANSI_RESET + " with " + App.ANSI_BLUE + new_cid + App.ANSI_RESET);
+        String old_cid = "";
+        boolean found = false;
         try {
-            for (int i = 0; i < repo_list.size(); i++) {
-                Repository repo = new FileRepository(name);
-                Collection<Ref> allRefs = repo.getRefDatabase().getRefs();
-
+            ArrayList<String> commit_hashes = get_commit_hash(repo_git, file_name);
+            if (commit_hashes == null) {
+                App.logger.error(App.ANSI_RED + "[error] > Failed to get commit hashes" + App.ANSI_RESET);
+                return null;
             }
-            return true;
+            for (String cid : commit_hashes) {
+                if (found) {
+                    old_cid = cid;
+                    break;
+                }
+                if (cid.equals(new_cid)) {
+                    found = true;
+                }
+            }
+            if (!found) {
+                App.logger.error(App.ANSI_RED + "[error] > Failed to find commit " + new_cid + App.ANSI_RESET);
+                return null;
+            }
         } catch (Exception e) {
-            App.logger.error(App.ANSI_RED + "[error] > Exception : " + e.getMessage());
-            return false;
+            App.logger.error(App.ANSI_RED + e.getMessage() + App.ANSI_RESET);
+            return null;
         }
+        return extract_diff(repo_git, repo_name, file_name, new_cid, old_cid);
     }
 
-    public String[] get_changed_file(String repo_git, String repo_name, String new_cid, String old_cid) {
+    public String[] extract_diff(String repo_git, String repo_name, String file_name, String new_cid, String old_cid) {
+        App.logger.trace(App.ANSI_BLUE + "[status] > extracting diff from " + App.ANSI_BLUE + repo_name + App.ANSI_RESET
+                + " between "
+                + App.ANSI_BLUE + old_cid + App.ANSI_RESET + " and " + App.ANSI_BLUE + new_cid + App.ANSI_RESET);
         String[] result = new String[4];
         try {
             Repository repo = new FileRepository(repo_git);
+            App.logger.info(App.ANSI_YELLOW + "[status] > repo " + repo_name + App.ANSI_RESET + " is "
+                    + App.ANSI_YELLOW + repo.getDirectory().getAbsolutePath() + App.ANSI_RESET);
             ObjectId oldHead = repo.resolve(old_cid + "^{tree}");
             ObjectId newHead = repo.resolve(new_cid + "^{tree}");
             if (oldHead == null || newHead == null) {
-                App.logger.error(App.ANSI_RED + "[error] > oldHead or newHead is null");
+                App.logger.error(App.ANSI_RED + "[error] > oldHead or newHead is null" + App.ANSI_RESET);
                 repo.close();
                 return null;
             }
@@ -83,56 +112,32 @@ public class GitFunctions {
                 String str_new = entry.getNewPath();
                 String str_old = entry.getOldPath();
                 if (str_new.endsWith(".java") && str_old.endsWith(".java")) {
-                    result[0] = new_cid;
-                    result[1] = old_cid;
-                    result[2] = str_new;
-                    result[3] = str_old;
+                    if (file_name.equals("")) {
+                        result[0] = new_cid;
+                        result[1] = old_cid;
+                        result[2] = str_new;
+                        result[3] = str_old;
+                    } else {
+                        if (str_new.contains(file_name)) {
+                            result[0] = new_cid;
+                            result[1] = old_cid;
+                            result[2] = str_new;
+                            result[3] = str_old;
+                        }
+                    }
                 }
             }
             git.close();
             repo.close();
         } catch (Exception e) {
-            App.logger.error(App.ANSI_RED + "[error] > Exception : " + e.getMessage());
+            App.logger.error(App.ANSI_RED + "[error] > Exception : " + e.getMessage() + App.ANSI_RESET);
             return null;
         }
         return result;
     }
 
-    private boolean printResult(Process process) {
-        try {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                System.out.println(line);
-            }
-            reader.close();
-            return true;
-        } catch (Exception e) {
-            App.logger.error(App.ANSI_RED + "[error] > Exception : " + e.getMessage());
-            return false;
-        }
-    }
-
-    private boolean saveResult(Process process, String path) {
-        try {
-            File file = new File(path, "commitID.txt");
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            BufferedWriter writer = new BufferedWriter(new FileWriter(file));
-            String line = "";
-            while ((line = reader.readLine()) != null) {
-                line = line.substring(1, line.length() - 1);
-                writer.write(line + "\n");
-            }
-            writer.close();
-            reader.close();
-            return true;
-        } catch (Exception e) {
-            App.logger.error(App.ANSI_RED + "[error] > Exception : " + e.getMessage());
-            return false;
-        }
-    }
-
-    private String get_repo_name_from_url(String url) {
+    // use globally for extracting repo name from url
+    public static String get_repo_name_from_url(String url) {
         String[] url_split = url.split("/");
         for (String split : url_split) {
             if (split.contains(".git")) {

@@ -3,6 +3,12 @@
  */
 package ACC;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.util.Properties;
+
 import org.apache.logging.log4j.*;
 import org.apache.logging.log4j.core.config.Configurator;
 
@@ -21,12 +27,72 @@ public class App {
 
     public static void main(String[] args) {
         Configurator.setLevel(App.class, Level.TRACE);
-
         App app = new App();
-        app.run(args);
+        Properties properties = args.length > 0 ? app.loadProperties(args[0]) : app.loadProperties();
+        app.run(properties);
     }
 
-    public void run(String[] args) {
-        logger.trace(ANSI_BLUE + "[debug] > run" + ANSI_RESET);
+    public void run(Properties properties) {
+        // args designates the path of properties file
+        GitFunctions gitFunctions = new GitFunctions();
+        Extractor extractor = new Extractor();
+        String file_name = properties.getProperty("file_name");
+        String commit_id = properties.getProperty("commit_id");
+        String git_name = properties.getProperty("git_name");
+        String git_url = properties.getProperty("git_url");
+        String output_dir = properties.getProperty("output_dir");
+
+        if (!gitFunctions.clone(git_url, output_dir)) {
+            logger.error(ANSI_RED + "[error] > Failed to clone " + git_url);
+            return;
+        }
+
+        String repo_git = output_dir + "/" + git_name;
+
+        String[] diff = gitFunctions.extract_diff(repo_git, git_name, file_name, commit_id);
+        if (diff == null) {
+            logger.error(ANSI_RED + "[error] > Failed to extract diff");
+            return;
+        }
+        try {
+            BufferedWriter writer = new BufferedWriter(new FileWriter(new File(output_dir, "diff.txt")));
+            for (String line : diff) {
+                writer.write(line);
+                writer.write(" ");
+            }
+            writer.newLine();
+            writer.close();
+        } catch (Exception e) {
+            logger.error(ANSI_RED + "[error] > Exception : " + e.getMessage());
+            return;
+        }
+
+        String diff_path = output_dir + "/diff.txt";
+
+        if (!extractor.extract_log(repo_git, diff_path, output_dir)) {
+            logger.error(ANSI_RED + "[error] > Failed to extract gumtree log");
+            return;
+        }
+        String gumtree_log = output_dir + "/gumtree_log.txt";
+        if (extractor.extract_vector(git_name, gumtree_log, output_dir) != 0) {
+            logger.error(ANSI_RED + "[error] > Failed to extract gumtree vector");
+            return;
+        }
+    }
+
+    public Properties loadProperties() {
+        return loadProperties("../acc.properties");
+    }
+
+    public Properties loadProperties(String path) {
+        // Format : <file_name(java)> <commit> <git_name> <git_url>
+        Properties properties = new Properties();
+        try {
+            properties.load(new FileInputStream(path));
+        } catch (Exception e) {
+            logger.error(ANSI_RED + "[error] > Exception : " + e.getMessage());
+            return null;
+        }
+        return properties;
     }
 }
